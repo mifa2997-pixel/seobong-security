@@ -1,0 +1,8 @@
+{
+  "short_name": "서봉보안",
+  "name": "서봉초 보안점검",
+  "start_url": ".",
+  "display": "standalone",
+  "theme_color": "#2563eb",
+  "background_color": "#ffffff"
+}
