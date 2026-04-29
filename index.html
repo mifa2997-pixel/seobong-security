@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>서봉초 보안점검 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;700;900&display=swap');
+        body { font-family: 'Pretendard', sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+        const { ShieldCheck, History, ClipboardCheck, LogOut, Bell, AlertCircle, CheckCircle2, Clock, Download, BarChart3, CalendarDays, FileSpreadsheet, Edit2, X, Save, User, Settings } = lucide;
+
+        // Firebase 설정 (선생님 정보를 이미 넣어두었습니다)
+        const firebaseConfig = {
+            apiKey: "AIzaSyDRPq0wBYhatVrLOos3uZB9zSD8bzyszi8",
+            authDomain: "seobong-security.firebaseapp.com",
+            projectId: "seobong-security",
+            storageBucket: "seobong-security.firebasestorage.app",
+            messagingSenderId: "221313692552",
+            appId: "1:221313692552:web:0106988936043c5a20c03d",
+        };
+
+        if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+        const db = firebase.firestore();
+        const appId = 'seobong-security-app';
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [role, setRole] = useState(null);
+            const [view, setView] = useState('main'); 
+            const [logs, setLogs] = useState([]);
+            const [isSubmitting, setIsSubmitting] = useState(false);
+            const [message, setMessage] = useState(null);
+            const [checklist, setChecklist] = useState({ lightsOff: false, windowsClosed: false, securitySet: false, trashEmptied: false, acOff: false });
+            const [notes, setNotes] = useState("");
+            const [reporterName, setReporterName] = useState("");
+
+            useEffect(() => {
+                const unsubscribe = auth.onAuthStateChanged((u) => {
+                    if (!u) auth.signInAnonymously();
+                    setUser(u);
+                });
+                return () => unsubscribe();
+            }, []);
+
+            useEffect(() => {
+                if (!user) return;
+                const logsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('security_logs');
+                return logsRef.onSnapshot((snapshot) => {
+                    const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                    setLogs(data.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0)));
+                });
+            }, [user]);
+
+            const showMessage = (text, type) => {
+                setMessage({ text, type });
+                setTimeout(() => setMessage(null), 3000);
+            };
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (role === 'late_leaver' && !reporterName.trim()) return showMessage("성함을 입력해주세요.", "error");
+                if (!Object.values(checklist).every(v => v)) return showMessage("모든 항목을 체크해주세요.", "error");
+                setIsSubmitting(true);
+                try {
+                    const logsRef = db.collection('artifacts').doc(appId).collection('public').doc('data').collection('security_logs');
+                    let userName = role === 'staff' ? "돌봄 선생님" : role === 'late_leaver' ? `퇴청자(${reporterName})` : "관리자";
+                    await logsRef.add({ userName, timestamp: firebase.firestore.FieldValue.serverTimestamp(), checklist, notes, date: new Date().toLocaleDateString('ko-KR') });
+                    setChecklist({ lightsOff: false, windowsClosed: false, securitySet: false, trashEmptied: false, acOff: false });
+                    setNotes(""); setReporterName("");
+                    showMessage("보고가 제출되었습니다!", "success");
+                } catch (e) { showMessage("오류가 발생했습니다.", "error"); }
+                finally { setIsSubmitting(false); }
+            };
+
+            if (!role) {
+                return (
+                    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+                        <div className="bg-white p-8 rounded-3xl shadow-xl max-w-md w-full text-center border">
+                            <div className="w-20 h-20 bg-blue-50 rounded-2xl flex items-center justify-center mx-auto mb-6"><ShieldCheck className="w-10 h-10 text-blue-600" /></div>
+                            <h1 className="text-2xl font-bold mb-8">서봉초 보안점검</h1>
+                            <div className="space-y-3">
+                                <button onClick={() => setRole('staff')} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold">돌봄 선생님</button>
+                                <button onClick={() => setRole('late_leaver')} className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold">19시 이후 퇴청자</button>
+                                <button onClick={() => setRole('admin')} className="w-full py-4 bg-slate-800 text-white rounded-2xl font-bold">관리자</button>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            return (
+                <div className="min-h-screen bg-slate-50 pb-12">
+                    <nav className="bg-white border-b p-4 flex justify-between items-center shadow-sm sticky top-0 z-10">
+                        <div className="flex items-center gap-2 font-bold"><ShieldCheck className="text-blue-600" /> 서봉초 보안일지</div>
+                        <button onClick={() => setRole(null)}><LogOut className="text-slate-400" /></button>
+                    </nav>
+                    <main className="max-w-lg mx-auto p-4 mt-4">
+                        {message && <div className={`p-4 rounded-xl mb-4 text-white font-bold ${message.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>{message.text}</div>}
+                        <div className="bg-white p-6 rounded-3xl shadow-sm border">
+                            <h2 className="text-lg font-bold mb-6">보안 점검 보고</h2>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                {role === 'late_leaver' && <input type="text" value={reporterName} onChange={e => setReporterName(e.target.value)} placeholder="성함을 입력하세요" className="w-full p-4 bg-slate-50 rounded-2xl border-none" />}
+                                {['lightsOff', 'windowsClosed', 'securitySet', 'acOff', 'trashEmptied'].map(k => (
+                                    <label key={k} className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl cursor-pointer">
+                                        <input type="checkbox" checked={checklist[k]} onChange={e => setChecklist({...checklist, [k]: e.target.checked})} className="w-5 h-5 rounded text-blue-600" />
+                                        <span className="text-sm">{k === 'lightsOff' ? '소등 완료' : k === 'windowsClosed' ? '창문/문 잠금' : k === 'securitySet' ? '세콤 가동' : k === 'acOff' ? '냉난방 OFF' : '정리 완료'}</span>
+                                    </label>
+                                ))}
+                                <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="특이사항(선택)" className="w-full p-4 bg-slate-50 rounded-2xl border-none min-h-[100px]" />
+                                <button type="submit" disabled={isSubmitting} className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold shadow-lg disabled:bg-slate-300">{isSubmitting ? "전송 중..." : "제출하기"}</button>
+                            </form>
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+        ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+    </script>
+</body>
+</html>
